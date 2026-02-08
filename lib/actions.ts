@@ -3,7 +3,7 @@
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import {extract} from "tar";
+import { extract } from "tar";
 import { normalizeGitHubUrl } from "./utils";
 
 const TEMP_DIR = path.join(os.tmpdir(), "ai-codebase-explainer");
@@ -42,22 +42,29 @@ function parseGitHubOwnerRepo(url: string): { owner: string; repo: string } | nu
 }
 
 
-export async function cloneRepository(repoUrl: string) {
-    const { url, error: validationError } = normalizeGitHubUrl(repoUrl);
-    if (validationError) return { success: false, error: validationError };
 
-    const parsed = parseGitHubOwnerRepo(url);
-    if (!parsed) return { success: false, error: "Invalid GitHub URL." };
-
-    const { owner, repo } = parsed;
-    const repoName = repo;
-    const uniqueId = `${repoName}-${Date.now()}`;
+// Internal helper to ensure repo exists or clone it
+async function ensureRepo(owner: string, repo: string): Promise<{ success: boolean; id: string; path: string; error?: string }> {
+    const uniqueId = `${owner}@${repo}`;
     const localPath = path.join(TEMP_DIR, uniqueId);
     const tarballPath = path.join(TEMP_DIR, `${uniqueId}.tar.gz`);
 
     try {
+        await fs.access(localPath);
+        // If it exists, we assume it's good (in a real app, might want to check if empty or pull updates)
+        return {
+            success: true,
+            id: uniqueId,
+            path: localPath,
+        };
+    } catch {
+        // Does not exist, proceed to clone
+    }
+
+    try {
         await fs.mkdir(TEMP_DIR, { recursive: true });
-        await fs.mkdir(localPath, { recursive: true });
+        // Clean up any partials
+        await fs.rm(localPath, { recursive: true, force: true }).catch(() => { });
 
         const tarballUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/HEAD`;
         const res = await fetch(tarballUrl, {
@@ -67,29 +74,51 @@ export async function cloneRepository(repoUrl: string) {
 
         if (!res.ok) {
             const text = await res.text();
-            if (res.status === 404) return { success: false, error: "Repository not found. Check the URL or that the repo is public." };
-            return { success: false, error: userFriendlyCloneError(text || `HTTP ${res.status}`) };
+            if (res.status === 404) return { success: false, id: uniqueId, path: "", error: "Repository not found. Check the URL or that the repo is public." };
+            return { success: false, id: uniqueId, path: "", error: userFriendlyCloneError(text || `HTTP ${res.status}`) };
         }
 
         const buf = await res.arrayBuffer();
         await fs.writeFile(tarballPath, new Uint8Array(buf));
 
+        await fs.mkdir(localPath, { recursive: true });
         await extract({ file: tarballPath, cwd: localPath, strip: 1 });
 
-        await fs.unlink(tarballPath).catch(() => {});
+        await fs.unlink(tarballPath).catch(() => { });
 
         return {
             success: true,
             id: uniqueId,
             path: localPath,
-            message: `Successfully downloaded to ${localPath}`,
         };
     } catch (error: unknown) {
-        await fs.unlink(tarballPath).catch(() => {});
+        await fs.unlink(tarballPath).catch(() => { });
         const message = error instanceof Error ? error.message : String(error);
         console.error("Clone error:", error);
-        return { success: false, error: userFriendlyCloneError(message) };
+        return { success: false, id: uniqueId, path: "", error: userFriendlyCloneError(message) };
     }
+}
+
+export async function cloneRepository(repoUrl: string) {
+    const { url, error: validationError } = normalizeGitHubUrl(repoUrl);
+    if (validationError) return { success: false, error: validationError };
+
+    const parsed = parseGitHubOwnerRepo(url);
+    if (!parsed) return { success: false, error: "Invalid GitHub URL." };
+
+    const { owner, repo } = parsed;
+    const result = await ensureRepo(owner, repo);
+
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+
+    return {
+        success: true,
+        id: result.id,
+        path: result.path,
+        message: `Successfully downloaded to ${result.path}`,
+    };
 }
 
 export async function getRepoFileTree(id: string): Promise<FileNode | null> {
@@ -175,8 +204,27 @@ export async function getFileContent(repoId: string, filePath: string) {
 
 import { analyzeRepoDependencies } from "./analysis";
 
+
+
 export async function analyzeRepo(repoId: string) {
     try {
+        // 1. Try to analyze directly
+        const repoPath = path.join(TEMP_DIR, repoId);
+        try {
+            await fs.access(repoPath);
+        } catch {
+            // 2. If missing, try to restore
+            if (repoId.includes("@")) {
+                const [owner, ...rest] = repoId.split("@");
+                const repo = rest.join("@"); // just in case
+                if (owner && repo) {
+                    await ensureRepo(owner, repo);
+                }
+            } else {
+                // Fallback for old IDs or simple ones
+            }
+        }
+
         const graph = await analyzeRepoDependencies(repoId);
         return { success: true, data: graph };
     } catch (error: unknown) {
