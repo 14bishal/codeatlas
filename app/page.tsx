@@ -4,7 +4,6 @@ import { LandingPageForm } from "@/components/landing-page";
 export default function Home() {
     return (
         <div className="relative flex relative min-h-screen flex-col items-center justify-center overflow-hidden bg-background text-foreground">
-            {/* Decorative blurs — minimal layout impact */}
             <Image
                 src="/CodeAtlas.png"
                 alt="CodeAtlas"
@@ -50,7 +49,6 @@ export default function Home() {
                 <LandingPageForm />
             </div>
 
-            {/* Footer — copyright with CodeAtlas icon and name */}
             <footer className="z-10 w-full shrink-0 py-6 text-center">
                 <div className="flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                     <p>© {new Date().getFullYear()} CodeAtlas. All rights reserved.</p>
