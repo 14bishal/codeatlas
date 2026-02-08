@@ -27,6 +27,7 @@ export function DashboardLayout() {
 
     const searchParams = useSearchParams();
     const repoId = searchParams.get("id");
+    console.log("🚀 ~ DashboardLayout ~ repoId:", repoId)
 
     // Hydration guard: mount state needed for client-only UI
     useEffect(() => {
