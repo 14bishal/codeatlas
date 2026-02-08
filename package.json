@@ -22,7 +22,8 @@
     "react-dom": "19.2.3",
     "react-resizable-panels": "^4.5.7",
     "simple-git": "^3.30.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "tar": "^7.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

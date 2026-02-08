@@ -3,10 +3,9 @@
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { simpleGit } from "simple-git";
+import {extract} from "tar";
 import { normalizeGitHubUrl } from "./utils";
 
-// We'll clone repos into a temporary directory on the server
 const TEMP_DIR = path.join(os.tmpdir(), "ai-codebase-explainer");
 
 export type FileNode = {
@@ -28,26 +27,65 @@ function userFriendlyCloneError(message: string): string {
     return message || "Something went wrong. Please try again.";
 }
 
+function parseGitHubOwnerRepo(url: string): { owner: string; repo: string } | null {
+    try {
+        const u = new URL(url);
+        if (!/github\.com$/i.test(u.hostname)) return null;
+        const parts = u.pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+        if (parts.length >= 2) {
+            return { owner: parts[0], repo: parts[1].replace(/\.git$/i, "") };
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+
 export async function cloneRepository(repoUrl: string) {
     const { url, error: validationError } = normalizeGitHubUrl(repoUrl);
     if (validationError) return { success: false, error: validationError };
 
+    const parsed = parseGitHubOwnerRepo(url);
+    if (!parsed) return { success: false, error: "Invalid GitHub URL." };
+
+    const { owner, repo } = parsed;
+    const repoName = repo;
+    const uniqueId = `${repoName}-${Date.now()}`;
+    const localPath = path.join(TEMP_DIR, uniqueId);
+    const tarballPath = path.join(TEMP_DIR, `${uniqueId}.tar.gz`);
+
     try {
-        const repoName = url.split("/").pop()?.replace(/\.git$/i, "") || "repo";
-        const uniqueId = `${repoName}-${Date.now()}`;
-        const localPath = path.join(TEMP_DIR, uniqueId);
-
         await fs.mkdir(TEMP_DIR, { recursive: true });
+        await fs.mkdir(localPath, { recursive: true });
 
-        await simpleGit().clone(url, localPath, ["--depth", "1"]);
+        const tarballUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/HEAD`;
+        const res = await fetch(tarballUrl, {
+            redirect: "follow",
+            headers: { "User-Agent": "AI-Codebase-Explainer" },
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            if (res.status === 404) return { success: false, error: "Repository not found. Check the URL or that the repo is public." };
+            return { success: false, error: userFriendlyCloneError(text || `HTTP ${res.status}`) };
+        }
+
+        const buf = await res.arrayBuffer();
+        await fs.writeFile(tarballPath, new Uint8Array(buf));
+
+        await extract({ file: tarballPath, cwd: localPath, strip: 1 });
+
+        await fs.unlink(tarballPath).catch(() => {});
 
         return {
             success: true,
             id: uniqueId,
             path: localPath,
-            message: `Successfully cloned to ${localPath}`,
+            message: `Successfully downloaded to ${localPath}`,
         };
     } catch (error: unknown) {
+        await fs.unlink(tarballPath).catch(() => {});
         const message = error instanceof Error ? error.message : String(error);
         console.error("Clone error:", error);
         return { success: false, error: userFriendlyCloneError(message) };
