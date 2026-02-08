@@ -13,7 +13,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         redirect("/");
     }
 
-    const fileTree = await getRepoFileTree(id);
+    // const fileTree = await getRepoFileTree(id);
 
-    return <DashboardLayout fileTree={fileTree} />;
+    return <DashboardLayout />;
 }

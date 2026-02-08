@@ -94,6 +94,7 @@ export async function cloneRepository(repoUrl: string) {
 
 export async function getRepoFileTree(id: string): Promise<FileNode | null> {
     const repoPath = path.join(TEMP_DIR, id);
+    console.log("🚀 ~ getRepoFileTree ~ repoPath:", repoPath)
 
     try {
         await fs.access(repoPath);

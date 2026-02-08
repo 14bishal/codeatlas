@@ -11,15 +11,14 @@ import { DependencyGraph } from "@/lib/types";
 import { Home, Share2, LogOut, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import SidebarItem from "./SidebarItem";
-import Image from "next/image";
 
-interface DashboardLayoutProps {
-    fileTree: FileNode | null;
-}
+// interface DashboardLayoutProps {
+//     fileTree: FileNode | null;
+// }
 
 type ViewType = "overview" | "architecture" | "files";
 
-export function DashboardLayout({ fileTree }: DashboardLayoutProps) {
+export function DashboardLayout() {
     const [isMounted, setIsMounted] = useState(false);
     const router = useRouter();
     const [activeView, setActiveView] = useState<ViewType>("overview");
@@ -53,7 +52,7 @@ export function DashboardLayout({ fileTree }: DashboardLayoutProps) {
 
     if (!isMounted) return <DashboardLoading />;
 
-    if (fileTree === null && repoId) {
+    if (repoId) {
         return (
             <div className="h-screen w-screen bg-background text-foreground flex flex-col items-center justify-center gap-6 p-8">
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 max-w-md text-center">
@@ -119,7 +118,8 @@ export function DashboardLayout({ fileTree }: DashboardLayoutProps) {
                             {activeView === "files" && "Code Explorer"}
                         </h1>
                         <p className="text-xs text-muted-foreground">
-                            {fileTree ? fileTree.name : "Analyzing Repository..."}
+                            {/* {fileTree ? fileTree.name : "Analyzing Repository..."} */}
+                            Analyzing Repository...
                         </p>
                     </div>
 
