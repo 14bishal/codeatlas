@@ -17,6 +17,8 @@ import {
     getBezierPath,
     EdgeProps,
     NodeProps,
+    Handle,
+    EdgeLabelRenderer,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
@@ -69,7 +71,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = "LR") {
     return { nodes: layoutedNodes, edges };
 }
 
-function DependencyNode({ data, selected }: NodeProps<Node<NodeData>>) {
+function DependencyNode({ data, selected, sourcePosition, targetPosition }: NodeProps<Node<NodeData>>) {
     const riskLevel = data.riskLevel ?? "low";
     const inCycle = data.inCycle ?? false;
     return (
@@ -115,6 +117,8 @@ function DependencyNode({ data, selected }: NodeProps<Node<NodeData>>) {
                     </span>
                 )}
             </div>
+            <Handle type="target" position={targetPosition || Position.Left} className="!bg-muted-foreground !w-2 !h-2" />
+            <Handle type="source" position={sourcePosition || Position.Right} className="!bg-muted-foreground !w-2 !h-2" />
         </div>
     );
 }
@@ -130,37 +134,44 @@ function EdgeWithHover({ id, data, ...props }: EdgeProps) {
         targetPosition: props.targetPosition ?? Position.Left,
     });
     const label = (data?.label as string) ?? "";
+    const imports = (data?.imports as string[]) ?? [];
+
+    const displayLabel = imports.length > 0
+        ? `Imports: ${imports.slice(0, 3).join(", ")}${imports.length > 3 ? ` +${imports.length - 3} more` : ""}`
+        : label;
 
     return (
-        <g
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            className="cursor-default"
-        >
+        <>
             <path
                 id={id}
                 d={edgePath}
                 fill="none"
                 stroke={hovered ? "var(--primary)" : "var(--border)"}
-                strokeWidth={hovered ? 2.5 : 1.5}
-                className="transition-[stroke,stroke-width]"
+                strokeWidth={5}
+                className="transition-[stroke,stroke-width] cursor-pointer"
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
             />
-            {hovered && label && (
-                <foreignObject
-                    x={labelX - 120}
-                    y={labelY - 14}
-                    width={240}
-                    height={28}
-                    className="pointer-events-none"
-                >
-                    <div className="flex items-center justify-center h-full w-full">
-                        <span className="rounded bg-primary/95 text-primary-foreground text-xs px-2 py-1 shadow-lg border border-primary-foreground/20 truncate max-w-full">
-                            {label}
-                        </span>
+            {hovered && displayLabel && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, 50%) translate(${labelX}px,${labelY}px)`,
+                            pointerEvents: 'none',
+                            zIndex: 1000,
+                        }}
+                        className="nodrag nopan"
+                    >
+                        <div className="flex flex-col items-center justify-center w-60">
+                            <span className="rounded bg-primary/95 text-primary-foreground text-xs px-2 py-1 shadow-lg border border-primary-foreground/20 max-w-full text-center">
+                                {displayLabel}
+                            </span>
+                        </div>
                     </div>
-                </foreignObject>
+                </EdgeLabelRenderer>
             )}
-        </g>
+        </>
     );
 }
 
@@ -171,12 +182,36 @@ export function ArchitectureView({ data, isLoading }: ArchitectureViewProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [showRiskyOnly, setShowRiskyOnly] = useState(false);
+    const [showAllNodes, setShowAllNodes] = useState(false);
     const [allNodes, setAllNodes] = useState<Node[]>([]);
     const [allEdges, setAllEdges] = useState<Edge[]>([]);
 
+    const MAX_INITIAL_NODES = 100;
+    const isLargeRepo = (data?.nodes.length || 0) > MAX_INITIAL_NODES;
+
     useEffect(() => {
         if (!data || data.nodes.length === 0) return;
-        const initialNodes: Node[] = data.nodes.map((node: GraphNode) => ({
+
+        // 1. Convert all data to React Flow elements
+        let processedNodes: GraphNode[] = [...data.nodes];
+
+        // Filter for large repos unless "Show All" is checked
+        if (isLargeRepo && !showAllNodes) {
+            // Priority: Core > Entry > Others
+            processedNodes.sort((a, b) => {
+                const roleScore = (role?: string) => {
+                    if (role === "core") return 3;
+                    if (role === "connector") return 2;
+                    return 1;
+                };
+                return roleScore(b.moduleRole) - roleScore(a.moduleRole);
+            });
+            processedNodes = processedNodes.slice(0, MAX_INITIAL_NODES);
+        }
+
+        const nodeIds = new Set(processedNodes.map(n => n.id));
+
+        const initialNodes: Node[] = processedNodes.map((node: GraphNode) => ({
             id: node.id,
             type: "dependencyNode",
             data: {
@@ -190,16 +225,18 @@ export function ArchitectureView({ data, isLoading }: ArchitectureViewProps) {
             position: { x: 0, y: 0 },
         }));
 
-        const initialEdges: Edge[] = data.edges.map((edge) => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            type: "default",
-            data: { label: edge.label },
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-            style: { stroke: "var(--border)" },
-        }));
+        const initialEdges: Edge[] = data.edges
+            .filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+            .map((edge) => ({
+                id: edge.id,
+                source: edge.source,
+                target: edge.target,
+                type: "default",
+                data: { label: edge.label, imports: edge.imports },
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed },
+                style: { stroke: "var(--border)" },
+            }));
 
         const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
             initialNodes,
@@ -213,7 +250,7 @@ export function ArchitectureView({ data, isLoading }: ArchitectureViewProps) {
         };
         const id = setTimeout(apply, 0);
         return () => clearTimeout(id);
-    }, [data, setNodes, setEdges]);
+    }, [data, setNodes, setEdges, isLargeRepo, showAllNodes]);
 
     useEffect(() => {
         if (allNodes.length === 0) return;
@@ -292,6 +329,26 @@ export function ArchitectureView({ data, isLoading }: ArchitectureViewProps) {
                         <Filter className="h-4 w-4" />
                         {showRiskyOnly ? "Show all" : "Risky only"}
                     </button>
+                    {data && data.nodes.length > 100 && (
+                        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-xs backdrop-blur">
+                            <p className="font-semibold text-amber-600 mb-1 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Large Repo
+                            </p>
+                            <p className="text-muted-foreground mb-2">
+                                {showAllNodes ?
+                                    `Showing all ${data.nodes.length} nodes. This may be slow.` :
+                                    `Showing top 100 of ${data.nodes.length} nodes for performance.`
+                                }
+                            </p>
+                            <button
+                                onClick={() => setShowAllNodes(!showAllNodes)}
+                                className="text-primary underline hover:text-primary/80"
+                            >
+                                {showAllNodes ? "Show top 100 only" : "Show all nodes"}
+                            </button>
+                        </div>
+                    )}
                     <div className="rounded-lg border border-border bg-card/95 p-3 text-xs shadow-lg backdrop-blur">
                         <p className="font-semibold text-foreground mb-2">Legend</p>
                         <ul className="space-y-1.5 text-muted-foreground">

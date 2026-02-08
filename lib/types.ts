@@ -23,6 +23,8 @@ export interface GraphEdge {
     type: 'static' | 'dynamic';
     /** Human-readable: "source → target" for tooltips */
     label?: string;
+    /** Captured imports for this edge */
+    imports?: string[];
 }
 
 export interface DetectedFramework {

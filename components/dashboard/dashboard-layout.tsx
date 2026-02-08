@@ -2,13 +2,14 @@
 
 import { ArchitectureView } from "@/components/dashboard/architecture-view";
 import { ProjectOverview } from "@/components/dashboard/project-overview";
+import { SystemDesignView } from "@/components/dashboard/system-design-view";
 import { useState, useEffect } from "react";
 import type { FileNode } from "@/lib/actions";
 import { analyzeRepo } from "@/lib/actions";
 import { useSearchParams, useRouter } from "next/navigation";
 import DashboardLoading from "@/app/dashboard/loading";
 import { DependencyGraph } from "@/lib/types";
-import { Home, Share2, LogOut, AlertCircle } from "lucide-react";
+import { Home, Share2, LogOut, AlertCircle, BookOpen } from "lucide-react";
 import Link from "next/link";
 import SidebarItem from "./SidebarItem";
 
@@ -16,7 +17,8 @@ import SidebarItem from "./SidebarItem";
 //     fileTree: FileNode | null;
 // }
 
-type ViewType = "overview" | "architecture" | "files";
+
+type ViewType = "overview" | "architecture" | "files" | "design";
 
 export function DashboardLayout() {
     const [isMounted, setIsMounted] = useState(false);
@@ -73,7 +75,7 @@ export function DashboardLayout() {
         );
     }
 
-    
+
 
     return (
         <div className="h-screen w-screen bg-background text-foreground flex overflow-hidden">
@@ -87,6 +89,7 @@ export function DashboardLayout() {
                 <div className="flex flex-col gap-3 w-full items-center">
                     <SidebarItem setActiveView={setActiveView} icon={Home} label="Overview" view="overview" isActive={activeView === "overview"} />
                     <SidebarItem setActiveView={setActiveView} icon={Share2} label="Architecture" view="architecture" isActive={activeView === "architecture"} />
+                    <SidebarItem setActiveView={setActiveView} icon={BookOpen} label="System Design" view="design" isActive={activeView === "design"} />
                     {/* <SidebarItem icon={FolderOpen} label="File Explorer" view="files" isActive={activeView === "files"} /> */}
                 </div>
 
@@ -115,6 +118,7 @@ export function DashboardLayout() {
                         <h1 className="font-semibold text-lg">
                             {activeView === "overview" && "Project Overview"}
                             {activeView === "architecture" && "Architecture & Dependencies"}
+                            {activeView === "design" && "System Design & Analysis"}
                             {activeView === "files" && "Code Explorer"}
                         </h1>
                         <p className="text-xs text-muted-foreground">
@@ -142,6 +146,12 @@ export function DashboardLayout() {
                     {activeView === "architecture" && (
                         <div className="h-full w-full">
                             <ArchitectureView data={graphData} isLoading={isAnalyzing} />
+                        </div>
+                    )}
+
+                    {activeView === "design" && (
+                        <div className="h-full w-full bg-muted/5">
+                            <SystemDesignView data={graphData} isLoading={isAnalyzing} />
                         </div>
                     )}
 

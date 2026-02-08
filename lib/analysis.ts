@@ -14,7 +14,28 @@ import {
 const TEMP_DIR = path.join(os.tmpdir(), "ai-codebase-explainer");
 const TOP_FAN_THRESHOLD = 5; // Top N files for high fan-in / fan-out
 
-const IMPORT_REGEX = /import\s+(?:[\w\s{},*]+)\s+from\s+['"](.+)['"]/g;
+
+const IMPORT_REGEX = /import\s+(?:([\w*\s{},]+)\s+from\s+)?['"]([^'"]+)['"]/g;
+// Helper to extract named/default imports from the first capture group
+// e.g. "React, { useState }" -> ["React", "useState"]
+function parseImportSpecifiers(specifiers: string): string[] {
+    if (!specifiers) return [];
+    return specifiers
+        .split(",")
+        .map((s) => s.trim())
+        .map((s) => {
+            // Handle "import { X as Y }" -> "X" (or Y? usually we care about the symbol used, or the source symbol? Let's show what is imported)
+            // Actually "X as Y" means we import X. "Y" is local name. 
+            // Let's capture the imported name "X".
+            const asMatch = s.match(/([^\s]+)\s+as\s+([^\s]+)/);
+            if (asMatch) return asMatch[1]; // The source name
+
+            // Handle "{ X }" -> "X" stripping braces
+            return s.replace(/[{}]/g, "").trim();
+        })
+        .filter(Boolean)
+        .filter(s => s !== "type" && s !== "from");
+}
 
 
 async function getFileContent(filePath: string): Promise<string> {
@@ -193,7 +214,7 @@ export async function analyzeRepoDependencies(repoId: string): Promise<Dependenc
         IMPORT_REGEX.lastIndex = 0;
 
         while ((match = IMPORT_REGEX.exec(content)) !== null) {
-            const importPath = match[1];
+            const importPath = match[2];
 
             let resolvedPath = "";
             if (importPath.startsWith("@/")) {
@@ -217,6 +238,8 @@ export async function analyzeRepoDependencies(repoId: string): Promise<Dependenc
 
             if (targetNodeId) {
                 const edgeId = `${node.id}-${targetNodeId}`;
+                const capturedImports = parseImportSpecifiers(match[1]); // match[1] is the specifiers part now
+
                 if (!addedEdges.has(edgeId)) {
                     const sourceLabel = node.label || path.basename(node.id);
                     const targetLabel = idToNode.get(targetNodeId)?.label || path.basename(targetNodeId);
@@ -226,10 +249,17 @@ export async function analyzeRepoDependencies(repoId: string): Promise<Dependenc
                         target: targetNodeId,
                         type: "static",
                         label: `${sourceLabel} → ${targetLabel}`,
+                        imports: capturedImports,
                     });
                     addedEdges.add(edgeId);
                     incomingEdgeCounts.set(targetNodeId, (incomingEdgeCounts.get(targetNodeId) || 0) + 1);
                     outgoingEdgeCounts.set(node.id, (outgoingEdgeCounts.get(node.id) || 0) + 1);
+                } else {
+                    // Update existing edge to merge imports if multiple import statements
+                    const existingEdge = edges.find(e => e.id === edgeId);
+                    if (existingEdge) {
+                        existingEdge.imports = Array.from(new Set([...(existingEdge.imports || []), ...capturedImports]));
+                    }
                 }
             }
         }

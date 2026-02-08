@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import { type FC } from "react";
 import { cn } from "@/lib/utils";
 
-export type ViewType = "overview" | "architecture" | "files";
+export type ViewType = "overview" | "architecture" | "files" | "design";
 
 interface SidebarItemProps {
     icon: ComponentType<{ className?: string }>;
