@@ -1,17 +1,21 @@
 "use client";
 
-import { DependencyGraph, ProjectStats } from "@/lib/types";
+import { DependencyGraph, ProjectStats, SecurityInsight } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
     Cpu,
-    Database,
     Globe,
     Layers,
     Server,
     Zap,
     Code,
-    LayoutTemplate
+    LayoutTemplate,
+    ShieldAlert,
+    ShieldCheck,
+    Activity,
+    PieChart,
+    AlertTriangle,
 } from "lucide-react";
 
 interface SystemDesignViewProps {
@@ -37,34 +41,94 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
         );
     }
 
-    const { stats, nodes } = data;
+    const { stats, nodes, securityInsights, layerBreakdown, codeQualityScore } = data;
 
     // --- Heuristic Helpers ---
 
     const getAppType = (stats: ProjectStats) => {
-        if (stats.frameworks.includes("Next.js")) return "Next.js Full-Stack Application";
-        if (stats.frameworks.includes("React") && stats.frameworks.includes("Express")) return "MERN Stack Application";
-        if (stats.frameworks.includes("React")) return "React Single Page Application (SPA)";
-        if (stats.frameworks.includes("Express")) return "Node.js/Express Backend API";
-        return "JavaScript/TypeScript Project";
+        const fw = stats.frameworks;
+        if (fw.includes("Next.js")) return "Next.js Full-Stack Application";
+        if (fw.includes("React") && fw.includes("Express")) return "MERN Stack Application";
+        if (fw.includes("React")) return "React Single Page Application (SPA)";
+        if (fw.includes("React Native")) return "React Native Mobile App";
+        if (fw.includes("Django")) return "Django Web Application";
+        if (fw.includes("Flask")) return "Flask Microservice";
+        if (fw.includes("FastAPI")) return "FastAPI Backend Service";
+        if (fw.includes("Spring Boot")) return "Spring Boot Application";
+        if (fw.includes("Ruby on Rails")) return "Ruby on Rails Application";
+        if (fw.includes("Laravel")) return "Laravel PHP Application";
+        if (fw.includes("Express") || fw.includes("Fastify") || fw.includes("NestJS")) return "Node.js Backend API";
+        if (fw.includes("Gin") || fw.includes("Echo") || fw.includes("Fiber")) return "Go Web Service";
+        if (fw.includes("Actix") || fw.includes("Rocket")) return "Rust Web Service";
+        if (fw.includes("Ktor")) return "Kotlin Backend Service";
+        if (fw.includes("Electron")) return "Electron Desktop Application";
+
+        // Fallback to primary language
+        const lang = stats.primaryLanguage;
+        if (lang === "py") return "Python Project";
+        if (lang === "go") return "Go Project";
+        if (lang === "java") return "Java Project";
+        if (lang === "rs") return "Rust Project";
+        if (lang === "rb") return "Ruby Project";
+        if (lang === "php") return "PHP Project";
+        if (lang === "cs") return "C# Project";
+        if (lang === "kt") return "Kotlin Project";
+        if (lang === "swift") return "Swift Project";
+        if (lang === "dart") return "Flutter/Dart Project";
+        if (lang === "c" || lang === "cpp" || lang === "cc") return "C/C++ Project";
+        return "Software Project";
     };
 
     const getArchitectureDescription = (stats: ProjectStats) => {
-        const patterns = stats.architecturalPatterns?.map(p => p.name) || [];
-        if (patterns.includes("App Router / File-based routing")) {
-            return "This project uses the Next.js App Router for file-system based routing. It likely leverages React Server Components for performance and SEO.";
-        }
-        if (patterns.includes("Pages Router (Next.js)")) {
-            return "This project uses the classic Next.js Pages Router. It handles routing based on the 'pages' directory structure.";
-        }
-        if (patterns.includes("Layered (lib/components + types)")) {
-            return "The codebase follows a scalable layered architecture, separating core logic (lib/utils) from UI components and type definitions.";
-        }
+        const patterns = stats.architecturalPatterns?.map((p) => p.name) || [];
+        if (patterns.includes("MVT (Model-View-Template)"))
+            return "This project uses Django's Model-View-Template architecture for building web applications with a clear separation of data, logic, and presentation.";
+        if (patterns.includes("MVC (Model-View-Controller)"))
+            return "This project follows the Model-View-Controller pattern, separating application concerns into models (data), views (presentation), and controllers (logic).";
+        if (patterns.includes("Layered Architecture (Spring MVC)"))
+            return "This project follows Spring's layered architecture with controllers, services, and repositories for clear separation of concerns.";
+        if (patterns.includes("App Router / File-based routing"))
+            return "This project uses the Next.js App Router for file-system based routing with React Server Components.";
+        if (patterns.includes("Pages Router (Next.js)"))
+            return "This project uses the classic Next.js Pages Router for directory-based routing.";
+        if (patterns.includes("Microservice / REST API"))
+            return "This project is structured as a microservice/REST API, exposing endpoints for client consumption.";
+        if (patterns.includes("Clean Architecture / REST API"))
+            return "This project follows a clean architecture pattern for building web APIs with clear dependency boundaries.";
+        if (patterns.includes("Layered (lib/components + types)"))
+            return "The codebase follows a scalable layered architecture, separating core logic from UI components.";
         return "The project follows a conventional modular structure, organizing code into logical directories.";
     };
 
-    const coreComponents = nodes.filter(n => n.moduleRole === "core").slice(0, 5);
+    const coreComponents = nodes.filter((n) => n.moduleRole === "core").slice(0, 5);
     const entryPoints = stats.entryPoints.slice(0, 5);
+
+    // Quality score color
+    const qualityColor =
+        (codeQualityScore ?? 100) >= 80 ? "text-green-500" :
+            (codeQualityScore ?? 100) >= 60 ? "text-yellow-500" :
+                (codeQualityScore ?? 100) >= 40 ? "text-orange-500" : "text-red-500";
+
+    const qualityBg =
+        (codeQualityScore ?? 100) >= 80 ? "bg-green-500/10 border-green-500/20" :
+            (codeQualityScore ?? 100) >= 60 ? "bg-yellow-500/10 border-yellow-500/20" :
+                (codeQualityScore ?? 100) >= 40 ? "bg-orange-500/10 border-orange-500/20" : "bg-red-500/10 border-red-500/20";
+
+    // Security counts
+    const criticalCount = securityInsights?.filter((s) => s.severity === "critical").length ?? 0;
+    const warningCount = securityInsights?.filter((s) => s.severity === "warning").length ?? 0;
+
+    // Layer colors
+    const layerColors: Record<string, string> = {
+        presentation: "bg-blue-500",
+        business: "bg-purple-500",
+        data: "bg-green-500",
+        infrastructure: "bg-orange-500",
+        test: "bg-yellow-500",
+        config: "bg-gray-500",
+    };
+
+    const totalLayerFiles = Object.values(layerBreakdown ?? {}).reduce((a, b) => a + b, 0) || 1;
 
     return (
         <div className="h-full w-full overflow-y-auto">
@@ -96,9 +160,136 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                                 {stats.architecturalPatterns?.map((pattern) => (
                                     <Badge key={pattern.name} variant="outline" className="bg-background/50">
                                         {pattern.name}
+                                        {pattern.hint && (
+                                            <span className="ml-1 opacity-50 text-[10px]">({pattern.hint})</span>
+                                        )}
                                     </Badge>
                                 ))}
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Code Quality Score */}
+                    <Card className={qualityBg}>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Activity className="w-4 h-4" />
+                                Code Quality Score
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center gap-4">
+                                <div className={`text-5xl font-bold ${qualityColor}`}>
+                                    {codeQualityScore ?? "—"}
+                                </div>
+                                <div className="text-sm text-muted-foreground space-y-1">
+                                    <p>
+                                        {(codeQualityScore ?? 100) >= 80
+                                            ? "Excellent — well-structured and maintainable."
+                                            : (codeQualityScore ?? 100) >= 60
+                                                ? "Good — some areas need improvement."
+                                                : (codeQualityScore ?? 100) >= 40
+                                                    ? "Fair — consider refactoring high-risk files."
+                                                    : "Needs attention — significant complexity detected."}
+                                    </p>
+                                    <p className="text-xs opacity-60">
+                                        Based on complexity, documentation, coupling, and risk analysis.
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Security Overview */}
+                    <Card className={criticalCount > 0 ? "border-red-500/30" : ""}>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                {criticalCount > 0 ? (
+                                    <ShieldAlert className="w-4 h-4 text-red-500" />
+                                ) : (
+                                    <ShieldCheck className="w-4 h-4 text-green-500" />
+                                )}
+                                Security Overview
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {(criticalCount + warningCount) === 0 ? (
+                                <p className="text-sm text-green-600">No security issues detected.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="flex gap-4 text-sm">
+                                        {criticalCount > 0 && (
+                                            <span className="flex items-center gap-1 text-red-500">
+                                                <AlertTriangle className="w-3.5 h-3.5" /> {criticalCount} critical
+                                            </span>
+                                        )}
+                                        {warningCount > 0 && (
+                                            <span className="flex items-center gap-1 text-yellow-600">
+                                                <AlertTriangle className="w-3.5 h-3.5" /> {warningCount} warning{warningCount !== 1 ? "s" : ""}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                        {securityInsights?.slice(0, 10).map((issue: SecurityInsight, i: number) => (
+                                            <div key={i} className="flex items-center gap-2 text-xs">
+                                                <Badge variant={issue.severity === "critical" ? "destructive" : "outline"} className="text-[10px] shrink-0">
+                                                    {issue.severity}
+                                                </Badge>
+                                                <span className="font-mono truncate opacity-70">{issue.filePath}</span>
+                                                <span className="text-muted-foreground truncate">{issue.message}</span>
+                                            </div>
+                                        ))}
+                                        {(securityInsights?.length ?? 0) > 10 && (
+                                            <p className="text-xs text-muted-foreground">…and {(securityInsights?.length ?? 0) - 10} more</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Layer Breakdown */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <PieChart className="w-4 h-4" />
+                                Architectural Layers
+                            </CardTitle>
+                            <CardDescription>
+                                How files are distributed across layers
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {layerBreakdown && Object.keys(layerBreakdown).length > 0 ? (
+                                <>
+                                    {/* Stacked Bar */}
+                                    <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+                                        {Object.entries(layerBreakdown)
+                                            .sort((a, b) => b[1] - a[1])
+                                            .map(([layer, count]) => (
+                                                <div
+                                                    key={layer}
+                                                    className={`${layerColors[layer] ?? "bg-gray-400"} transition-all`}
+                                                    style={{ width: `${Math.max((count / totalLayerFiles) * 100, 2)}%` }}
+                                                    title={`${layer}: ${count} files`}
+                                                />
+                                            ))}
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+                                        {Object.entries(layerBreakdown)
+                                            .sort((a, b) => b[1] - a[1])
+                                            .map(([layer, count]) => (
+                                                <div key={layer} className="flex items-center gap-1.5">
+                                                    <div className={`w-2 h-2 rounded-full ${layerColors[layer] ?? "bg-gray-400"}`} />
+                                                    <span className="capitalize">{layer}</span>
+                                                    <span className="text-muted-foreground">({count})</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-sm text-muted-foreground italic">Layer data unavailable.</p>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -125,11 +316,14 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                             <div>
                                 <span className="text-sm font-medium text-muted-foreground block mb-2">Languages</span>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {Object.entries(stats.languages).map(([lang]) => (
-                                        <Badge key={lang} variant="outline" className="uppercase text-[10px]">
-                                            {lang}
-                                        </Badge>
-                                    ))}
+                                    {Object.entries(stats.languages)
+                                        .sort((a, b) => b[1] - a[1])
+                                        .slice(0, 12)
+                                        .map(([lang, count]) => (
+                                            <Badge key={lang} variant="outline" className="uppercase text-[10px]">
+                                                {lang} <span className="opacity-50 ml-1">{count}</span>
+                                            </Badge>
+                                        ))}
                                 </div>
                             </div>
                         </CardContent>
@@ -149,11 +343,11 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                         <CardContent>
                             {coreComponents.length > 0 ? (
                                 <ul className="space-y-2">
-                                    {coreComponents.map(node => (
+                                    {coreComponents.map((node) => (
                                         <li key={node.id} className="flex items-center gap-2 text-sm">
                                             <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                             <span className="font-mono text-xs truncate" title={node.path}>{node.label}</span>
-                                            {/* <span className="ml-auto text-xs text-muted-foreground">{node.fanIn} refs</span> */}
+                                            <span className="ml-auto text-xs text-muted-foreground">{node.fanIn} refs</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -163,7 +357,7 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                         </CardContent>
                     </Card>
 
-                    {/* Data Flow / Entry */}
+                    {/* Entry Points & Flow */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
@@ -176,24 +370,20 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                                 <div>
                                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Public Interface</span>
                                     <div className="mt-1.5 space-y-1">
-                                        {entryPoints.map(ep => (
+                                        {entryPoints.map((ep) => (
                                             <div key={ep} className="bg-muted px-2 py-1 rounded text-xs font-mono truncate flex items-center gap-2">
                                                 <LayoutTemplate className="w-3 h-3 opacity-50" />
                                                 {ep}
                                             </div>
                                         ))}
+                                        {entryPoints.length === 0 && <p className="text-sm text-muted-foreground italic">No standard entry points detected.</p>}
                                     </div>
-                                </div>
-                                <div className="pt-2 border-t border-border">
-                                    <p className="text-sm text-muted-foreground">
-                                        Data typically flows from these entry points into feature components and then down to core utilities and UI primitives.
-                                    </p>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Project Structure Insight */}
+                    {/* Application Structure */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
@@ -203,35 +393,54 @@ export function SystemDesignView({ data, isLoading }: SystemDesignViewProps) {
                         </CardHeader>
                         <CardContent>
                             <div className="text-sm space-y-2 text-muted-foreground">
-                                <p>
+                                <div>
                                     <strong className="text-foreground">Total Files:</strong> {stats.totalFiles}
-                                </p>
-                                <p>
-                                    <strong className="text-foreground">Complexity:</strong> {nodes.length} analzyed nodes with {data.edges.length} dependencies.
-                                </p>
-                                <p>
-                                    This codebase appears to be
+                                </div>
+                                <div>
+                                    <strong className="text-foreground">Analyzed Nodes:</strong> {nodes.length} with {data.edges.length} dependencies
+                                </div>
+                                <div>
+                                    <strong className="text-foreground">Primary Language:</strong>{" "}
+                                    <Badge variant="outline" className="uppercase text-[10px]">{stats.primaryLanguage ?? "N/A"}</Badge>
+                                </div>
+                                <div>
+                                    This codebase is
                                     {nodes.length > 100 ? " a large-scale project " : nodes.length > 30 ? " a medium-sized project " : " a small project "}
-                                    with {stats.languages['ts'] ? "strong typing usage (TypeScript)." : "dynamic typing (JavaScript)."}
-                                </p>
+                                    with {data.circularDependencies?.length
+                                        ? `${data.circularDependencies.length} circular dependency cycle${data.circularDependencies.length > 1 ? "s" : ""} detected.`
+                                        : "no circular dependencies."}
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Future / Suggested Improvements (Static placeholder for now, could be dynamic) */}
-                    <Card className="opacity-75">
+                    {/* Recommendations */}
+                    <Card className="opacity-80">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
                                 <Code className="w-4 h-4" />
-                                Recommended Patterns
+                                Recommendations
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
                             <ul className="text-sm space-y-1.5 list-disc pl-4 text-muted-foreground">
+                                {(data.circularDependencies?.length ?? 0) > 0 && (
+                                    <li className="text-orange-500">Resolve {data.circularDependencies?.length} circular dependency cycle{(data.circularDependencies?.length ?? 0) > 1 ? "s" : ""} to improve maintainability.</li>
+                                )}
+                                {criticalCount > 0 && (
+                                    <li className="text-red-500">Address {criticalCount} critical security issue{criticalCount > 1 ? "s" : ""} immediately.</li>
+                                )}
+                                {(codeQualityScore ?? 100) < 60 && (
+                                    <li>Consider refactoring high-complexity files to improve quality score.</li>
+                                )}
                                 {stats.frameworks.includes("React") && <li>Consider component composition to reduce prop drilling.</li>}
                                 {stats.frameworks.includes("Next.js") && <li>Leverage Server Actions for mutation logic to simplify API layers.</li>}
-                                {!stats.frameworks.includes("TypeScript") && <li>Migrating to TypeScript is recommended for better scalability.</li>}
-                                <li>Ensure separate concerns between UI (components) and Business Logic (hooks/utils).</li>
+                                {stats.frameworks.includes("Django") && <li>Use Django REST framework for API endpoints and serialization.</li>}
+                                {stats.frameworks.includes("Spring Boot") && <li>Follow layered architecture with @Service/@Repository annotations.</li>}
+                                {!stats.frameworks.includes("TypeScript") && stats.primaryLanguage && ["ts", "tsx", "js", "jsx"].includes(stats.primaryLanguage) && (
+                                    <li>Migrating to TypeScript is recommended for better scalability.</li>
+                                )}
+                                <li>Ensure separate concerns between presentation, business logic, and data layers.</li>
                             </ul>
                         </CardContent>
                     </Card>

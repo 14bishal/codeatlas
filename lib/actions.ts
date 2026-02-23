@@ -203,11 +203,20 @@ export async function getFileContent(repoId: string, filePath: string) {
 }
 
 import { analyzeRepoDependencies } from "./analysis";
+import type { DependencyGraph } from "./types";
 
-
+// ── Analysis Result Cache (30 min TTL) ──
+const analysisCache = new Map<string, { data: DependencyGraph; timestamp: number }>();
+const CACHE_TTL = 30 * 60 * 1000;
 
 export async function analyzeRepo(repoId: string) {
     try {
+        // Check cache first
+        const cached = analysisCache.get(repoId);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+            return { success: true, data: cached.data };
+        }
+
         // 1. Try to analyze directly
         const repoPath = path.join(TEMP_DIR, repoId);
         try {
@@ -216,16 +225,18 @@ export async function analyzeRepo(repoId: string) {
             // 2. If missing, try to restore
             if (repoId.includes("@")) {
                 const [owner, ...rest] = repoId.split("@");
-                const repo = rest.join("@"); // just in case
+                const repo = rest.join("@");
                 if (owner && repo) {
                     await ensureRepo(owner, repo);
                 }
-            } else {
-                // Fallback for old IDs or simple ones
             }
         }
 
         const graph = await analyzeRepoDependencies(repoId);
+
+        // Store in cache
+        analysisCache.set(repoId, { data: graph, timestamp: Date.now() });
+
         return { success: true, data: graph };
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);

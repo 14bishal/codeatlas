@@ -1,4 +1,29 @@
-export type NodeType = 'file' | 'component' | 'hook' | 'util' | 'api' | 'config' | 'other';
+export type NodeType = 'file' | 'component' | 'hook' | 'util' | 'api' | 'config' | 'model' | 'test' | 'middleware' | 'service' | 'other';
+
+export interface CodeMetrics {
+    linesOfCode: number;
+    cyclomaticComplexity: number;
+    commentRatio: number;
+}
+
+export interface LayerClassification {
+    layer: 'presentation' | 'business' | 'data' | 'infrastructure' | 'test' | 'config';
+    confidence: number;
+}
+
+export interface RiskDetail {
+    level: 'low' | 'medium' | 'high';
+    score: number;
+    factors: string[];
+}
+
+export interface SecurityInsight {
+    type: 'hardcoded-secret' | 'sql-injection-risk' | 'unsafe-eval' | 'no-auth-check' | 'unsafe-regex';
+    filePath: string;
+    line?: number;
+    severity: 'info' | 'warning' | 'critical';
+    message: string;
+}
 
 export interface GraphNode {
     id: string;
@@ -14,6 +39,12 @@ export interface GraphNode {
     moduleRole?: 'core' | 'peripheral' | 'connector';
     /** If this node is part of a circular dependency */
     inCycle?: boolean;
+    /** Code-level metrics */
+    metrics?: CodeMetrics;
+    /** Architectural layer classification */
+    layerClassification?: LayerClassification;
+    /** Detailed risk breakdown */
+    riskDetail?: RiskDetail;
 }
 
 export interface GraphEdge {
@@ -47,6 +78,8 @@ export interface ProjectStats {
     frameworkVersions?: DetectedFramework[];
     entryPoints: string[];
     totalFiles: number;
+    /** Primary language of the repository */
+    primaryLanguage?: string;
     /** Detected patterns: e.g. feature-based, layered, MVC */
     architecturalPatterns?: ArchitecturalPattern[];
 }
@@ -67,4 +100,10 @@ export interface DependencyGraph {
     highFanInIds?: string[];
     /** File IDs with unusually high fan-out (e.g. top 5) */
     highFanOutIds?: string[];
+    /** Lightweight security scan results */
+    securityInsights?: SecurityInsight[];
+    /** Architectural layer → file count */
+    layerBreakdown?: Record<string, number>;
+    /** Composite code quality score 0-100 */
+    codeQualityScore?: number;
 }

@@ -121,10 +121,6 @@ export function DashboardLayout() {
                             {activeView === "design" && "System Design & Analysis"}
                             {activeView === "files" && "Code Explorer"}
                         </h1>
-                        <p className="text-xs text-muted-foreground">
-                            {/* {fileTree ? fileTree.name : "Analyzing Repository..."} */}
-                            Analyzing Repository...
-                        </p>
                     </div>
 
                     {/* Actions or Status could go here */}
